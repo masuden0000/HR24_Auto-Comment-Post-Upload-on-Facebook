@@ -1,3 +1,4 @@
+import os
 import random
 import time
 
@@ -10,22 +11,315 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
-# --- PENGATURAN ---
-EMAIL_LO = "Ganti dengan email/username"
-PASSWORD_LO = "Ganti dengan password"
-URL_POSTINGAN = "Ganti dengan URL postingan target"
-KOMENTAR_LO = [
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
+EMAIL = os.getenv("FACEBOOK_EMAIL", "")
+PASSWORD = os.getenv("FACEBOOK_PASSWORD", "")
+KOMENTAR = []
+POST_URLS_LIST = []  # Store all URLs to process
+
+# Default comment options
+DEFAULT_COMMENTS = [
     "ramaikan",
     "akun murah",
     "gasskan bang",
     "dijamin aman",
+    "mantap",
+    "up",
+    "gas",
+    "recommended",
 ]
+
 JEDA_WAKTU = 5
-JEDA_ANTAR_KOMENTAR_MIN = 15
-JEDA_ANTAR_KOMENTAR_MAX = 25
+JEDA_ANTAR_KOMENTAR_MIN = 6
+JEDA_ANTAR_KOMENTAR_MAX = 10
 MAX_WAIT_TIME = 20
-ULANG_KOMENTAR = 5
+ULANG_KOMENTAR = 1
 JEDA_ANTAR_ULANGAN = 120
+
+# Default post URLs for quick selection
+DEFAULT_POSTS = [
+    "LINK PERTAMA",
+    "LINK KEDUA"
+]
+
+
+def get_post_urls():
+    """Get Facebook post URLs from user input or default selection"""
+    print("\n" + "=" * 60)
+    print("🔗 INPUT POSTINGAN FACEBOOK")
+    print("=" * 60)
+
+    # Ask user if they want to use default posts or input manually
+    print("📋 Pilih metode input postingan:")
+    print("1. Gunakan postingan default")
+    print("2. Input postingan manual")
+    print("3. Gabungan default + manual")
+
+    while True:
+        choice = input("Pilih opsi (1/2/3): ").strip()
+        if choice in ["1", "2", "3"]:
+            break
+        print("❌ Pilihan tidak valid! Pilih 1, 2, atau 3")
+
+    post_urls = []
+
+    # Option 1: Use default posts
+    if choice == "1":
+        print(f"\n📋 Postingan default yang tersedia:")
+        for i, post in enumerate(DEFAULT_POSTS, 1):
+            print(f"   {i}. {post}")
+
+        print(f"\n💡 Pilih postingan (contoh: 1,3,4 atau 'all' untuk semua):")
+        selection = input("Pilihan: ").strip().lower()
+
+        if selection == "all":
+            post_urls = DEFAULT_POSTS.copy()
+            print(f"✅ Menggunakan semua {len(post_urls)} postingan default")
+        else:
+            try:
+                indices = [int(x.strip()) for x in selection.split(",")]
+                post_urls = [
+                    DEFAULT_POSTS[i - 1]
+                    for i in indices
+                    if 1 <= i <= len(DEFAULT_POSTS)
+                ]
+                print(f"✅ Terpilih {len(post_urls)} postingan default")
+            except:
+                print("❌ Format pilihan tidak valid, menggunakan postingan pertama")
+                post_urls = [DEFAULT_POSTS[0]]
+
+    # Option 2: Manual input only
+    elif choice == "2":
+        print("📝 Masukkan link postingan Facebook yang ingin dikomentari")
+        print("💡 Format link: https://www.facebook.com/groups/namagrup/posts/idpost")
+        print("💡 Atau: https://www.facebook.com/username/posts/idpost")
+        print("=" * 60)
+
+        post_urls = get_manual_post_input()
+
+    # Option 3: Combination of default and manual
+    elif choice == "3":
+        # First, select from defaults
+        print(f"\n📋 Postingan default yang tersedia:")
+        for i, post in enumerate(DEFAULT_POSTS, 1):
+            print(f"   {i}. {post}")
+
+        print(f"\n💡 Pilih postingan default (contoh: 1,3 atau kosong untuk skip):")
+        selection = input("Pilihan: ").strip()
+
+        if selection:
+            try:
+                indices = [int(x.strip()) for x in selection.split(",")]
+                post_urls = [
+                    DEFAULT_POSTS[i - 1]
+                    for i in indices
+                    if 1 <= i <= len(DEFAULT_POSTS)
+                ]
+                print(f"✅ Terpilih {len(post_urls)} postingan default")
+            except:
+                print("❌ Format pilihan tidak valid, melewati default")
+                post_urls = []
+
+        # Then, add manual inputs
+        print(
+            f"\n📝 Sekarang tambahkan postingan manual (atau ketik 'skip' untuk melewati):"
+        )
+        manual_posts = get_manual_post_input(allow_skip=True)
+        if manual_posts:
+            post_urls.extend(manual_posts)
+
+    if not post_urls:
+        print("❌ Tidak ada postingan yang dipilih!")
+        return None
+
+    print(f"\n✅ Total {len(post_urls)} postingan Facebook siap untuk dikomentari:")
+    for i, post in enumerate(post_urls, 1):
+        display_url = post[:70] + "..." if len(post) > 70 else post
+        print(f"   {i}. {display_url}")
+
+    return post_urls
+
+
+def get_manual_post_input(allow_skip=False):
+    """Helper function for manual post input"""
+    post_urls = []
+
+    while True:
+        print(f"\n📍 Postingan ke-{len(post_urls) + 1}:")
+        if allow_skip and len(post_urls) == 0:
+            url = input(
+                "Masukkan link postingan Facebook (atau 'skip' untuk melewati): "
+            ).strip()
+            if url.lower() == "skip":
+                break
+        else:
+            url = input("Masukkan link postingan Facebook: ").strip()
+
+        if not url:
+            if len(post_urls) == 0:
+                print("⚠️ Minimal harus ada 1 postingan!")
+                continue
+            else:
+                break
+
+        # Basic validation for Facebook post URL
+        if "facebook.com" not in url:
+            print("⚠️ Link harus berupa link postingan Facebook yang valid!")
+            print("   Format: https://www.facebook.com/.../posts/...")
+            continue
+
+        post_urls.append(url)
+        print(f"✅ Postingan ditambahkan: {url[:50]}{'...' if len(url) > 50 else ''}")
+
+        # Ask if user wants to add more posts
+        print(f"\n📊 Total postingan yang sudah ditambahkan: {len(post_urls)}")
+        add_more = input("❓ Ingin menambah postingan lagi? (y/n): ").lower().strip()
+
+        if add_more not in ["y", "yes", "ya"]:
+            break
+
+    return post_urls
+
+
+def get_user_input():
+    """Get user input for posting URL and comments"""
+    global KOMENTAR, EMAIL, PASSWORD
+
+    print("=" * 60)
+    print("📝 SETUP KONFIGURASI AUTO COMMENT")
+    print("=" * 60)
+
+    # Get credentials if not in .env
+    if not EMAIL:
+        EMAIL = input("Masukkan email Facebook: ").strip()
+    if not PASSWORD:
+        PASSWORD = input("Masukkan password Facebook: ").strip()
+
+    if not EMAIL or not PASSWORD:
+        print("❌ Email dan password diperlukan!")
+        return False
+
+    # Get post URLs
+    post_urls = get_post_urls()
+    if not post_urls:
+        return False
+
+    # Store all post URLs for processing
+    global POST_URLS_LIST
+    POST_URLS_LIST = post_urls
+
+    print(f"\n✅ Total {len(POST_URLS_LIST)} postingan akan diproses:")
+    for i, url in enumerate(POST_URLS_LIST, 1):
+        display_url = url[:50] + "..." if len(url) > 50 else url
+        print(f"   {i}. {display_url}")
+
+    # Get comments
+    print(f"\n💬 SETUP KOMENTAR:")
+    print("Pilih metode input komentar:")
+    print("1. Gunakan komentar default")
+    print("2. Masukkan komentar custom")
+    print("3. Gabungan default dan custom")
+
+    choice = input("Pilih opsi (1/2/3): ").strip()
+
+    if choice == "1":
+        KOMENTAR = DEFAULT_COMMENTS.copy()
+        print(f"✅ Menggunakan {len(KOMENTAR)} komentar default")
+
+    elif choice == "2":
+        print("\n📝 Masukkan komentar Anda (ketik 'selesai' jika sudah selesai):")
+        KOMENTAR = []
+        while True:
+            comment = input("Komentar: ").strip()
+            if comment.lower() == "selesai":
+                break
+            if comment:
+                KOMENTAR.append(comment)
+                print(f"  ✅ Ditambahkan: {comment}")
+
+    elif choice == "3":
+        print("\n📝 Komentar default yang tersedia:")
+        for i, comment in enumerate(DEFAULT_COMMENTS, 1):
+            print(f"  {i}. {comment}")
+
+        print(
+            "\nMasukkan nomor komentar yang ingin digunakan (contoh: 1,3,5) atau 'semua' untuk semua:"
+        )
+        selection = input("Pilihan: ").strip()
+
+        if selection.lower() == "semua":
+            KOMENTAR = DEFAULT_COMMENTS.copy()
+        else:
+            try:
+                indices = [int(x.strip()) - 1 for x in selection.split(",")]
+                KOMENTAR = [
+                    DEFAULT_COMMENTS[i]
+                    for i in indices
+                    if 0 <= i < len(DEFAULT_COMMENTS)
+                ]
+            except:
+                print("❌ Pilihan tidak valid, menggunakan semua komentar default")
+                KOMENTAR = DEFAULT_COMMENTS.copy()
+
+        print(f"\n✅ Terpilih {len(KOMENTAR)} komentar")
+
+        # Option to add custom comments
+        add_custom = input("Tambahkan komentar custom? (y/n): ").lower().strip()
+        if add_custom in ["y", "yes", "ya"]:
+            print("Masukkan komentar tambahan (ketik 'selesai' jika sudah selesai):")
+            while True:
+                comment = input("Komentar: ").strip()
+                if comment.lower() == "selesai":
+                    break
+                if comment:
+                    KOMENTAR.append(comment)
+                    print(f"  ✅ Ditambahkan: {comment}")
+
+    if not KOMENTAR:
+        print("❌ Minimal diperlukan satu komentar!")
+        return False
+
+    # Get repeat settings
+    global ULANG_KOMENTAR, JEDA_ANTAR_ULANGAN
+    print(f"\n🔄 PENGATURAN PENGULANGAN:")
+    print(
+        f"Pengaturan saat ini: Ulang {ULANG_KOMENTAR} kali dengan jeda {JEDA_ANTAR_ULANGAN} detik"
+    )
+    change_repeat = input("Ubah pengaturan pengulangan? (y/n): ").lower().strip()
+
+    if change_repeat in ["y", "yes", "ya"]:
+        try:
+            ULANG_KOMENTAR = int(input("Jumlah pengulangan (1-10): "))
+            if ULANG_KOMENTAR < 1 or ULANG_KOMENTAR > 10:
+                ULANG_KOMENTAR = 1
+
+            if ULANG_KOMENTAR > 1:
+                JEDA_ANTAR_ULANGAN = int(input("Jeda antar pengulangan (detik): "))
+        except:
+            print("⚠️  Menggunakan pengaturan pengulangan default")
+
+    # Summary
+    print(f"\n📋 RINGKASAN:")
+    print(f"Email: {EMAIL}")
+    print(f"Postingan: {len(POST_URLS_LIST)} postingan akan diproses")
+    print(f"Komentar: {len(KOMENTAR)} item")
+    print(f"Pengulangan: {ULANG_KOMENTAR} kali")
+    if ULANG_KOMENTAR > 1:
+        print(f"Jeda antar pengulangan: {JEDA_ANTAR_ULANGAN} detik")
+
+    print(f"\nKomentar yang akan diposting:")
+    for i, comment in enumerate(KOMENTAR, 1):
+        print(f"  {i}. {comment}")
+
+    confirm = input("\nLanjutkan dengan pengaturan ini? (y/n): ").lower().strip()
+    return confirm in ["y", "yes", "ya"]
 
 
 # --- FUNGSI HELPER ---
@@ -212,6 +506,10 @@ def wait_for_facebook_main_page(driver, max_wait_minutes=10):
 
 # --- KODE UTAMA ---
 def auto_comment():
+    if not get_user_input():
+        print("❌ Setup dibatalkan atau input tidak valid")
+        return
+
     print("Memulai bot auto comment...")
 
     try:
@@ -260,14 +558,14 @@ def auto_comment():
         email_input = wait.until(EC.presence_of_element_located((By.ID, "email")))
 
         email_input.clear()
-        for char in EMAIL_LO:
+        for char in EMAIL:
             email_input.send_keys(char)
             time.sleep(random.uniform(0.05, 0.15))
         time.sleep(random.uniform(1, 2))
 
         pass_input = driver.find_element(By.ID, "pass")
         pass_input.clear()
-        for char in PASSWORD_LO:
+        for char in PASSWORD:
             pass_input.send_keys(char)
             time.sleep(random.uniform(0.05, 0.15))
         time.sleep(random.uniform(1, 2))
@@ -416,15 +714,63 @@ def auto_comment():
         print("💡 Tips: Pastikan akun valid dan selesaikan CAPTCHA jika muncul")
         input("Tekan Enter setelah menyelesaikan masalah di browser...")
 
-    try:
-        print(f"Membuka postingan: {URL_POSTINGAN}")
-        driver.get(URL_POSTINGAN)
-        time.sleep(random.uniform(JEDA_WAKTU, JEDA_WAKTU + 3))
-    except Exception as e:
-        print(f"Gagal membuka URL postingan. Error: {e}")
-        driver.quit()
-        return
+    # Process all posts
+    successful_posts = 0
+    total_posts = len(POST_URLS_LIST)
 
+    print(f"\n🚀 Memulai pemrosesan {total_posts} postingan...")
+    print("=" * 60)
+
+    for post_index, post_url in enumerate(POST_URLS_LIST, 1):
+        print(f"\n📍 POSTINGAN {post_index}/{total_posts}")
+        print(f"🔗 URL: {post_url}")
+        print("-" * 40)
+
+        try:
+            print(f"Membuka postingan...")
+            driver.get(post_url)
+            time.sleep(random.uniform(JEDA_WAKTU, JEDA_WAKTU + 3))
+
+            # Process comments for this post
+            if process_comments_for_post(driver, post_url, post_index):
+                successful_posts += 1
+                print(f"✅ Postingan {post_index} berhasil diproses!")
+            else:
+                print(f"❌ Postingan {post_index} gagal diproses!")
+
+            # Wait between posts (except for the last one)
+            if post_index < total_posts:
+                wait_time = random.uniform(30, 60)  # Wait 30-60 seconds between posts
+                print(
+                    f"⏳ Menunggu {wait_time:.1f} detik sebelum postingan berikutnya..."
+                )
+                time.sleep(wait_time)
+
+        except Exception as e:
+            print(f"❌ Error pada postingan {post_index}: {e}")
+            continue
+
+    # Final summary
+    print("\n" + "=" * 60)
+    print("📊 RINGKASAN AKHIR")
+    print("=" * 60)
+    print(f"✅ Postingan berhasil: {successful_posts}/{total_posts}")
+    print(f"❌ Postingan gagal: {total_posts - successful_posts}/{total_posts}")
+
+    if successful_posts == total_posts:
+        print("🎉 Semua postingan berhasil diproses!")
+    elif successful_posts > 0:
+        print("⚠️ Sebagian postingan berhasil diproses")
+    else:
+        print("😞 Tidak ada postingan yang berhasil diproses")
+
+    print("Proses selesai. Menutup browser dalam 10 detik.")
+    time.sleep(10)
+    driver.quit()
+
+
+def process_comments_for_post(driver, post_url, post_number):
+    """Process comments for a single post"""
     wait = WebDriverWait(driver, MAX_WAIT_TIME)
 
     try:
@@ -444,15 +790,13 @@ def auto_comment():
                 comment_box = wait.until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
                 )
-                print(f"Comment box ditemukan dengan selector: {selector}")
                 break
             except:
                 continue
 
         if not comment_box:
-            raise Exception(
-                "Tidak dapat menemukan kolom komentar dengan semua selector"
-            )
+            print("❌ Tidak dapat menemukan kolom komentar")
+            return False
 
         driver.execute_script("arguments[0].scrollIntoView(true);", comment_box)
         time.sleep(2)
@@ -461,9 +805,9 @@ def auto_comment():
 
         for ulangan in range(ULANG_KOMENTAR):
             if ULANG_KOMENTAR > 1:
-                print(f"\n🔄 Ulangan ke-{ulangan + 1} dari {ULANG_KOMENTAR}")
+                print(f"🔄 Ulangan ke-{ulangan + 1} dari {ULANG_KOMENTAR}")
 
-            for i, comment_text in enumerate(KOMENTAR_LO):
+            for i, comment_text in enumerate(KOMENTAR):
                 try:
                     driver.execute_script("arguments[0].click();", comment_box)
                     time.sleep(random.uniform(1, 2))
@@ -484,36 +828,30 @@ def auto_comment():
                     except:
                         comment_box.send_keys(Keys.RETURN)
 
-                    print(f"Komentar ke-{i+1} terkirim: '{comment_text}'")
+                    print(f"✅ Komentar ke-{i+1}: '{comment_text}'")
 
-                    if i < len(KOMENTAR_LO) - 1:
+                    if i < len(KOMENTAR) - 1:
                         delay = random.uniform(
                             JEDA_ANTAR_KOMENTAR_MIN, JEDA_ANTAR_KOMENTAR_MAX
                         )
-                        print(
-                            f"Menunggu {delay:.1f} detik sebelum komentar berikutnya..."
-                        )
+                        print(f"⏳ Menunggu {delay:.1f} detik...")
                         time.sleep(delay)
 
                 except Exception as e:
-                    print(f"Gagal mengirim komentar ke-{i+1}: {e}")
+                    print(f"❌ Gagal mengirim komentar ke-{i+1}: {e}")
                     continue
 
             if ulangan < ULANG_KOMENTAR - 1:
                 print(
-                    f"\n⏳ Menunggu {JEDA_ANTAR_ULANGAN} detik sebelum ulangan berikutnya..."
+                    f"⏳ Menunggu {JEDA_ANTAR_ULANGAN} detik sebelum ulangan berikutnya..."
                 )
                 time.sleep(JEDA_ANTAR_ULANGAN)
 
+        return True
+
     except Exception as e:
-        print(f"Gagal menemukan kolom komentar atau mengirim komentar. Error: {e}")
-        print(
-            "Tips: Facebook sering ganti UI. Pastikan URL postingan benar dan akun memiliki akses."
-        )
-    finally:
-        print("Proses selesai. Menutup browser dalam 10 detik.")
-        time.sleep(10)
-        driver.quit()
+        print(f"❌ Error pada postingan {post_number}: {e}")
+        return False
 
 
 def main():

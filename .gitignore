@@ -126,10 +126,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Project specific files to ignore
-auto_upload_comment.py
-auto_upload_post.py
-
 # Selenium WebDriver logs
 geckodriver.log
 chromedriver.log
