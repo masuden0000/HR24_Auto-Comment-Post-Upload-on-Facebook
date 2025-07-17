@@ -43,10 +43,10 @@ Buka file `skrip.py` dengan text editor dan ubah bagian pengaturan berikut:
 
 ```python
 # --- PENGATURAN - GANTI SESUAI KEBUTUHAN LO ---
-EMAIL_LO = "email_facebook_anda@gmail.com"
-PASSWORD_LO = "password_facebook_anda"
+EMAIL = "email_facebook_anda@gmail.com"
+PASSWORD = "password_facebook_anda"
 URL_POSTINGAN = "https://www.facebook.com/username/posts/1234567890"
-KOMENTAR_LO = [
+KOMENTAR = [
     "Komentar pertama",
     "Komentar kedua",
     "Komentar ketiga",
@@ -63,10 +63,10 @@ JEDA_ANTAR_ULANGAN = 120          # Jeda antar ulangan komentar (detik)
 
 | Parameter                 | Deskripsi                       | Contoh                           |
 | ------------------------- | ------------------------------- | -------------------------------- |
-| `EMAIL_LO`                | Email/username Facebook         | `"user@gmail.com"`               |
-| `PASSWORD_LO`             | Password Facebook               | `"password123"`                  |
+| `EMAIL`                | Email/username Facebook         | `"user@gmail.com"`               |
+| `PASSWORD`             | Password Facebook               | `"password123"`                  |
 | `URL_POSTINGAN`           | Link postingan target           | `"https://www.facebook.com/..."` |
-| `KOMENTAR_LO`             | List komentar yang akan dikirim | `["komen1", "komen2"]`           |
+| `KOMENTAR`             | List komentar yang akan dikirim | `["komen1", "komen2"]`           |
 | `JEDA_WAKTU`              | Waktu tunggu awal               | `5` (detik)                      |
 | `JEDA_ANTAR_KOMENTAR_MIN` | Jeda minimum antar komentar     | `15` (detik)                     |
 | `JEDA_ANTAR_KOMENTAR_MAX` | Jeda maksimum antar komentar    | `25` (detik)                     |
@@ -262,14 +262,4 @@ comment_selectors = [
 ## ⚖️ Disclaimer
 
 Script ini dibuat untuk tujuan edukasi dan automasi personal. Penggunaan harus mematuhi Terms of Service Facebook. Developer tidak bertanggung jawab atas penyalahgunaan atau konsekuensi dari penggunaan script ini.
-
-## 📞 Support
-
-Jika mengalami masalah:
-
-1. Periksa bagian Troubleshooting di atas
-2. Pastikan semua dependency terinstall
-3. Coba dengan akun/postingan berbeda
-4. Update Chrome ke versi terbaru
-
 ---
